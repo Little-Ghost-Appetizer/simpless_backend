@@ -1,0 +1,12 @@
+Flask
+Flask-Cors
+langdetect
+nltk
+numpy
+pandas
+regex
+requests
+scikit-learn
+scipy
+sklearn
+URLSearchParams
