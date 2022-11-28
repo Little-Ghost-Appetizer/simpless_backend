@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import re
 import nltk
+import math
 nltk.download('stopwords', quiet=True)
 nltk.download('wordnet')
 nltk.download('omw-1.4')
@@ -206,7 +207,8 @@ data = []
 next_token = ''
 scrape_count = 0
 scrape_round = 0
-search = ''
+search = []
+search_idx = 0
 upper_round = 3
 upper_count = 10
 
@@ -225,7 +227,7 @@ class Simpless:
             try:
                 if wait_exist:
                     next_token = ''
-                    search = ''
+                    search.clear()
                     sem.release()
                     abort(500)
                 if next_token:
@@ -271,7 +273,7 @@ class Simpless:
                 next_token = json["next_token"]
         return 1
     def process(self):
-        global wait_exist, data, next_token, scrape_count, scrape_round, search, upper_round, upper_count
+        global wait_exist, data, next_token, scrape_count, scrape_round, search, search_idx, upper_round, upper_count
         print("Search: ", search)
         print("Start_round: ", scrape_round)
         wait_exist += 1
@@ -280,46 +282,74 @@ class Simpless:
         wait_exist -= 1
         if wait_exist:
             next_token = ''
-            search = ''
+            search.clear()
             sem.release()
             abort(500)
-        request_json = request.json
+        #request_json = request.json
+        request_json = request.args
         print("req: ", request_json)
-        if  (not next_token) or (not "continue" in request_json) or (not request_json["continue"]):
-            request_json = request.json
-            search = request_json["search_keyword"]
+        print("continue: ", request_json["continue"])
+        print("search_keyword: ", request_json["search_keyword"])
+
+        if  (not next_token) or (not "continue" in request_json) or (request_json["continue"]=='false'):
+            #search = request_json["search_keyword"]
+            search = request.args.getlist("search_keyword")
+            search_idx = 0
             next_token = ""
             if "upper_round" in request_json:
-                upper_round = request_json["upper_round"]
+                upper_round = math.ceil(int(request_json["upper_round"])/len(search))
             else:
                 upper_round = 3
             if "upper_count" in request_json:
-                upper_count = request_json["upper_count"]
+                upper_count = int(request_json["upper_count"])
             else:
                 upper_count = 10
-            data = []
+            data.clear()
             scrape_count = 0
             scrape_round = 0
+        if search_idx >= len(search):
+            num_tags = 10
+            if "num_tags" in request_json:
+                num_tags = int(request_json["num_tags"])
+            if len(data) == 0:
+                return jsonify({"finished": True})
+            sem.release()
+            try:
+                ml_result = generate_tags(data, num_tags)
+                ml_result["finished"] = True
+                return jsonify(ml_result)
+            except:
+                return jsonify({"finished": True})
+
         src = URLSearchParams("http://api.hashscraper.com/api/twitter?")
         searchParams = src.append({
             "api_key": API_KEY,
-            "keyword": search,
+            "keyword": search[search_idx],
             "max_count": 5,
         })
         headers = {'Content-Type': 'application/json; version=2'}
 
-        if scrape_round < upper_round:
+        if search_idx < len(search) and scrape_round < upper_round:
             while scrape_count < upper_count:
                 scrape_result = self.scrape(searchParams,headers)
                 if not scrape_result:
+                    search_idx += 1
+                    scrape_round = 0
+                    scrape_count = 0
                     sem.release()
-                    return jsonify({"finished": True})
+                    if search_idx>=len(search) and len(data) == 0:
+                        return jsonify({"finished": True})
+                    else:
+                        return jsonify({"keywords":[], "finished": False})
                 elif scrape_result == -1:
                     sem.release()
                     return jsonify({"keywords":[], "finished": False})
                 scrape_count += 1
             scrape_count = 0
             scrape_round += 1
+            if scrape_round >= upper_round:
+                search_idx += 1
+                scrape_round = 0
             sem.release()
             return jsonify({"keywords":[], "finished": False})
         else:
@@ -330,7 +360,9 @@ class Simpless:
             """
             num_tags = 10
             if "num_tags" in request_json:
-                num_tags = request_json["num_tags"]
+                num_tags = int(request_json["num_tags"])
+            if len(data) == 0:
+                return jsonify({"finished": True})
             sem.release()
             try:
                 ml_result = generate_tags(data, num_tags)
@@ -343,8 +375,13 @@ class Simpless:
         #    print(k, type(v), v)
 
         #return jsonify(self.data)
-        
+"""
 @app.route('/api/simplesssearch', methods=['POST'])
+def simplesssearch():
+   simp = Simpless()
+   return simp.process()
+"""
+@app.route('/api/simplesssearch', methods=['GET'])
 def simplesssearch():
    simp = Simpless()
    return simp.process()
