@@ -269,7 +269,9 @@ class Simpless:
                         else:
                             new_t_d[k] = v
                     new_temp_data.append(new_t_d)
+                print("temp data len: ", len(new_temp_data))
                 data.extend(new_temp_data)
+                print("data len: ", len(data))
                 next_token = json["next_token"]
         return 1
     def process(self):
@@ -289,9 +291,8 @@ class Simpless:
         request_json = request.args
         print("req: ", request_json)
         print("continue: ", request_json["continue"])
-        print("search_keyword: ", request_json["search_keyword"])
 
-        if  (not next_token) or (not "continue" in request_json) or (request_json["continue"]=='false'):
+        if  (not "continue" in request_json) or (request_json["continue"]=='false'):
             #search = request_json["search_keyword"]
             search = request.args.getlist("search_keyword")
             search_idx = 0
@@ -320,7 +321,7 @@ class Simpless:
                 return jsonify(ml_result)
             except:
                 return jsonify({"finished": True})
-
+        print("search_keyword: ", search[search_idx])
         src = URLSearchParams("http://api.hashscraper.com/api/twitter?")
         searchParams = src.append({
             "api_key": API_KEY,
@@ -330,6 +331,7 @@ class Simpless:
         headers = {'Content-Type': 'application/json; version=2'}
 
         if search_idx < len(search) and scrape_round < upper_round:
+            print("search idx: ", search_idx)
             while scrape_count < upper_count:
                 scrape_result = self.scrape(searchParams,headers)
                 if not scrape_result:
